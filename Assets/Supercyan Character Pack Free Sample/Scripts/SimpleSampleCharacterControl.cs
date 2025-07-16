@@ -16,7 +16,8 @@ namespace Supercyan.FreeSample
             /// </summary>
             Direct
         }
-
+        [SerializeField] private LayerMask groundLayers;
+        [SerializeField] private float groundCheckDistance = 0.1f;
         [SerializeField] private float m_moveSpeed = 2;
         [SerializeField] private float m_turnSpeed = 200;
         [SerializeField] private float m_jumpForce = 4;
@@ -25,7 +26,7 @@ namespace Supercyan.FreeSample
         [SerializeField] private Rigidbody m_rigidBody = null;
 
         [SerializeField] private ControlMode m_controlMode = ControlMode.Direct;
-
+        private bool m_jumpButtonHeld = false;
         private float m_currentV = 0;
         private float m_currentH = 0;
 
@@ -43,8 +44,6 @@ namespace Supercyan.FreeSample
 
         private bool m_isGrounded;
 
-        private List<Collider> m_collisions = new List<Collider>();
-
         private void Awake()
         {
             if (!m_animator) m_animator = GetComponent<Animator>();
@@ -52,71 +51,38 @@ namespace Supercyan.FreeSample
 
         }
 
-        private void OnCollisionEnter(Collision collision)
-        {
-            ContactPoint[] contactPoints = collision.contacts;
-            for (int i = 0; i < contactPoints.Length; i++)
-            {
-                if (Vector3.Dot(contactPoints[i].normal, Vector3.up) > 0.5f)
-                {
-                    if (!m_collisions.Contains(collision.collider))
-                    {
-                        m_collisions.Add(collision.collider);
-                    }
-                    m_isGrounded = true;
-                }
-            }
-        }
-
-        private void OnCollisionStay(Collision collision)
-        {
-            ContactPoint[] contactPoints = collision.contacts;
-            bool validSurfaceNormal = false;
-            for (int i = 0; i < contactPoints.Length; i++)
-            {
-                if (Vector3.Dot(contactPoints[i].normal, Vector3.up) > 0.5f)
-                {
-                    validSurfaceNormal = true; break;
-                }
-            }
-
-            if (validSurfaceNormal)
-            {
-                m_isGrounded = true;
-                if (!m_collisions.Contains(collision.collider))
-                {
-                    m_collisions.Add(collision.collider);
-                }
-            }
-            else
-            {
-                if (m_collisions.Contains(collision.collider))
-                {
-                    m_collisions.Remove(collision.collider);
-                }
-                if (m_collisions.Count == 0) { m_isGrounded = false; }
-            }
-        }
-
-        private void OnCollisionExit(Collision collision)
-        {
-            if (m_collisions.Contains(collision.collider))
-            {
-                m_collisions.Remove(collision.collider);
-            }
-            if (m_collisions.Count == 0) { m_isGrounded = false; }
-        }
 
         private void Update()
         {
-            if (!m_jumpInput && Input.GetKey(KeyCode.Space))
+            // Обработка одиночного нажатия
+            if (!m_jumpButtonHeld && Input.GetKeyDown(KeyCode.Space))
             {
                 m_jumpInput = true;
+                m_jumpButtonHeld = true;
+            }
+
+            // Сброс флага при отпускании
+            if (Input.GetKeyUp(KeyCode.Space))
+            {
+                m_jumpButtonHeld = false;
             }
         }
 
-        private void FixedUpdate()
+       private void FixedUpdate()
         {
+            Vector3 sphereCastOrigin = transform.position + Vector3.up * 0.5f;
+
+            m_isGrounded = Physics.SphereCast(
+                sphereCastOrigin,
+                0.2f,
+                Vector3.down,
+                out RaycastHit hit,
+                groundCheckDistance + 0.5f,
+                groundLayers
+            );
+
+            Debug.DrawRay(sphereCastOrigin, Vector3.down * (groundCheckDistance + 0.5f), m_isGrounded ? Color.green : Color.red);
+
             m_animator.SetBool("Grounded", m_isGrounded);
 
             switch (m_controlMode)
@@ -165,7 +131,6 @@ namespace Supercyan.FreeSample
 
             JumpingAndLanding();
         }
-
         private void DirectUpdate()
         {
             float v = Input.GetAxis("Vertical");
@@ -173,33 +138,44 @@ namespace Supercyan.FreeSample
 
             Transform camera = Camera.main.transform;
 
-            if (Input.GetKey(KeyCode.LeftShift))
+            Vector3 forward = camera.forward;
+            forward.y = 0;
+            forward.Normalize();
+
+            Vector3 right = camera.right;
+            right.y = 0;
+            right.Normalize();
+
+            Vector3 direction = forward * v + right * h;
+
+            if (direction.magnitude > 1f)
             {
-                v *= m_walkScale;
-                h *= m_walkScale;
+                direction.Normalize();
             }
 
-            m_currentV = Mathf.Lerp(m_currentV, v, Time.deltaTime * m_interpolation);
-            m_currentH = Mathf.Lerp(m_currentH, h, Time.deltaTime * m_interpolation);
-
-            Vector3 direction = camera.forward * m_currentV + camera.right * m_currentH;
-
-            float directionLength = direction.magnitude;
-            direction.y = 0;
-            direction = direction.normalized * directionLength;
-
-            if (direction != Vector3.zero)
+            // Применяем walkScale к итоговому вектору
+            if (Input.GetKey(KeyCode.LeftShift))
             {
-                m_currentDirection = Vector3.Slerp(m_currentDirection, direction, Time.deltaTime * m_interpolation);
+                direction *= m_walkScale;
+            }
 
+            m_currentDirection = Vector3.Slerp(m_currentDirection, direction, Time.deltaTime * m_interpolation);
+
+            if (m_currentDirection != Vector3.zero)
+            {
                 transform.rotation = Quaternion.LookRotation(m_currentDirection);
-                transform.position += m_currentDirection * m_moveSpeed * Time.deltaTime;
+
+                // Движение через Rigidbody
+                Vector3 newPosition = m_rigidBody.position + m_currentDirection * m_moveSpeed * Time.deltaTime;
+                m_rigidBody.MovePosition(newPosition);
 
                 m_animator.SetFloat("MoveSpeed", direction.magnitude);
             }
 
             JumpingAndLanding();
         }
+
+
 
         private void JumpingAndLanding()
         {
