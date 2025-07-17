@@ -43,32 +43,54 @@ namespace Supercyan.FreeSample
         private bool m_jumpInput = false;
 
         private bool m_isGrounded;
+        private bool m_attackInput = false;
+        
+        private float upperBodyWeight = 0f;
+        [SerializeField] private float attackDuration = 1f; // Длительность анимации атаки, выставь под свою анимацию
+        private float attackTimer = 0f;
+        private bool isAttacking = false;
 
         private void Awake()
         {
             if (!m_animator) m_animator = GetComponent<Animator>();
-	    if (!m_rigidBody) m_rigidBody = GetComponent<Rigidbody>();
+            if (!m_rigidBody) m_rigidBody = GetComponent<Rigidbody>();
 
         }
 
 
-        private void Update()
+        void Update()
         {
-            // Обработка одиночного нажатия
-            if (!m_jumpButtonHeld && Input.GetKeyDown(KeyCode.Space))
+            if (!isAttacking && Input.GetMouseButtonDown(0))
+            {
+                isAttacking = true;
+                attackTimer = attackDuration;
+                m_animator.SetTrigger("Attack");
+            }
+
+            if (isAttacking)
+            {
+                attackTimer -= Time.deltaTime;
+                if (attackTimer <= 0f)
+                {
+                    isAttacking = false;
+                }
+            }
+
+            float targetWeight = isAttacking ? 1f : 0f;
+            upperBodyWeight = Mathf.MoveTowards(upperBodyWeight, targetWeight, Time.deltaTime * 10f);
+            m_animator.SetLayerWeight(1, upperBodyWeight);
+            if (!m_jumpInput && Input.GetKey(KeyCode.Space))
             {
                 m_jumpInput = true;
-                m_jumpButtonHeld = true;
-            }
-
-            // Сброс флага при отпускании
-            if (Input.GetKeyUp(KeyCode.Space))
-            {
-                m_jumpButtonHeld = false;
             }
         }
 
-       private void FixedUpdate()
+
+        public void OnAttackAnimationEnd()
+        {
+            isAttacking = false;
+        }
+        private void FixedUpdate()
         {
             Vector3 sphereCastOrigin = transform.position + Vector3.up * 0.5f;
 
@@ -102,6 +124,14 @@ namespace Supercyan.FreeSample
 
             m_wasGrounded = m_isGrounded;
             m_jumpInput = false;
+
+            // Проверка на атаку
+            if (m_attackInput)
+            {
+                m_animator.SetTrigger("Attack"); // имя триггера в Animator
+                m_attackInput = false;
+            }
+
         }
 
         private void TankUpdate()
