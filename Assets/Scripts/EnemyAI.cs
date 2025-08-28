@@ -3,51 +3,47 @@ using UnityEngine.AI;
 
 public class EnemyAI : MonoBehaviour
 {
+    [Header("Movement")]
+    [SerializeField] private float moveSpeed = 2.5f;
+    [SerializeField] private float acceleration = 8f;
+
+    [Header("Jump Settings")]
+    [SerializeField] private float jumpForce = 5f;
+    [SerializeField] private float jumpCooldown = 1f;
+    [SerializeField] private float obstacleCheckDistance = 1f;
+    [SerializeField] private float maxObstacleHeight = 2f;
+
     [Header("Ground Check")]
     [SerializeField] private Transform groundCheck;
     [SerializeField] private float groundCheckRadius = 0.2f;
     [SerializeField] private LayerMask groundLayer;
-    private bool isGrounded;
 
-    [Header("References")]
-    [SerializeField] private Transform player;
-    private Animator animator;
-    private NavMeshAgent agent;
-    private Rigidbody rb;
+    [Header("Obstacle Check")]
+    [SerializeField] private LayerMask obstacleLayer; // выбрать Location
 
-    [Header("Combat")]
+    [Header("Attack")]
     [SerializeField] private float attackDistance = 2f;
     [SerializeField] private float attackCooldown = 1.5f;
-    private float attackTimer;
 
-    [Header("Jump")]
-    [SerializeField] private float jumpForce = 4f;
-    [SerializeField] private float jumpCooldown = 1f;
-    [SerializeField] private float obstacleCheckDistance = 1f;
-    [SerializeField] private LayerMask obstacleLayer;
+    [Header("References")]
+    public Transform player;
+
+    private NavMeshAgent agent;
+    private Rigidbody rb;
+    private Animator animator;
+
+    private bool isGrounded;
     private float lastJumpTime = -10f;
-
-    [Header("Movement")]
-    [SerializeField] private float moveSpeed = 2f;
-    [SerializeField] private float stoppingDistance = 1f; // Дистанция остановки для атаки
+    private float attackTimer = 0f;
 
     private void Awake()
     {
-        animator = GetComponent<Animator>();
         agent = GetComponent<NavMeshAgent>();
         rb = GetComponent<Rigidbody>();
-
-        if (!animator || !agent || !rb || !groundCheck || !player)
-        {
-            Debug.LogError($"Missing required component or player reference on {gameObject.name}!");
-            enabled = false;
-            return;
-        }
+        animator = GetComponent<Animator>();
 
         agent.speed = moveSpeed;
-        agent.stoppingDistance = stoppingDistance; // Устанавливаем дистанцию остановки
-        attackTimer = attackCooldown;
-        rb.constraints = RigidbodyConstraints.FreezeRotation; // Замораживаем вращение
+        agent.acceleration = acceleration;
     }
 
     private void FixedUpdate()
@@ -55,66 +51,84 @@ public class EnemyAI : MonoBehaviour
         isGrounded = Physics.CheckSphere(groundCheck.position, groundCheckRadius, groundLayer);
         animator.SetBool("Grounded", isGrounded);
 
-        if (isGrounded && !agent.enabled)
+        if (!isGrounded && agent.enabled)
         {
-            agent.enabled = true;
-            agent.Warp(transform.position);
-            animator.ResetTrigger("Jump");
-            animator.SetFloat("MoveSpeed", 0f);
-        }
-        else if (!isGrounded && agent.enabled)
-        {
+            Debug.Log("Enemy: Airborne, disabling agent.");
             agent.enabled = false;
         }
-
+        else if (isGrounded && !agent.enabled)
+        {
+            Debug.Log("Enemy: Landed, enabling agent.");
+            agent.enabled = true;
+        }
+    
         TryJumpIfNeeded();
     }
 
+    
     private void TryJumpIfNeeded()
     {
-        if (!isGrounded || Time.time - lastJumpTime < jumpCooldown || !player) return;
+        Debug.Log("TryJumpIfNeeded called");
 
-        bool needsJump = NeedsToJumpToReachPlayer() || IsObstacleInPath();
-        if (needsJump)
+        if (!isGrounded)
         {
-            agent.enabled = false;
-            rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
-            rb.AddForce(Vector3.up * jumpForce, ForceMode.VelocityChange);
-            lastJumpTime = Time.time;
-            animator.SetTrigger("Jump");
+            Debug.Log("Not grounded, skip jump.");
+            return;
         }
-    }
 
-    private bool NeedsToJumpToReachPlayer()
-    {
-        return player.position.y > transform.position.y + 0.5f;
-    }
-
-    private bool IsObstacleInPath()
-    {
-        Vector3 directionToPlayer = (player.position - transform.position).normalized;
-        RaycastHit hit;
-        if (Physics.Raycast(transform.position + Vector3.up * 0.5f, directionToPlayer, out hit, obstacleCheckDistance, obstacleLayer))
+        if (Time.time - lastJumpTime < jumpCooldown)
         {
-            Debug.DrawRay(transform.position + Vector3.up * 0.5f, directionToPlayer * obstacleCheckDistance, Color.red, 0.1f);
+            Debug.Log($"Jump cooldown active: {Time.time - lastJumpTime:0.00}/{jumpCooldown}");
+            return;
+        }
+
+        if (!IsObstacleInFront())
+        {
+            Debug.Log("No obstacle detected, skip jump.");
+            return;
+        }
+
+        Debug.Log("Jump triggered!");
+        agent.enabled = false;
+        rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+        lastJumpTime = Time.time;
+    }
+
+
+    private bool IsObstacleInFront()
+    {
+        Vector3 origin = transform.position + Vector3.up * 0.5f;
+        Vector3 direction = transform.forward;
+        float distance = 0.7f; // Увеличь если нужно
+
+        Debug.DrawRay(origin, direction * distance, Color.red, 0.5f);
+
+        if (Physics.Raycast(origin, direction, out RaycastHit hitInfo, distance, obstacleLayer))
+        {
+            Debug.Log($"Obstacle detected: {hitInfo.collider.name}");
             return true;
         }
         return false;
     }
 
+
+
     private void Update()
     {
-        if (!player || !agent.enabled) return;
+        if (player == null) return;
+        if (!agent.enabled) return;
 
         float distance = Vector3.Distance(transform.position, player.position);
-        Debug.Log($"Enemy: distance={distance}, agent.isStopped={agent.isStopped}, hasPath={agent.hasPath}, attackTimer={attackTimer}");
+
+        Debug.Log($"Enemy: distance={distance:0.00}, isGrounded={isGrounded}, agent.enabled={agent.enabled}, hasPath={agent.hasPath}");
 
         if (distance > attackDistance)
         {
             agent.isStopped = false;
             agent.SetDestination(player.position);
-            animator.SetFloat("MoveSpeed", agent.velocity.magnitude / agent.speed);
-            animator.ResetTrigger("Attack"); // Сбрасываем триггер атаки
+
+            float normalizedSpeed = agent.velocity.magnitude / agent.speed;
+            animator.SetFloat("MoveSpeed", normalizedSpeed);
         }
         else
         {
@@ -122,31 +136,13 @@ public class EnemyAI : MonoBehaviour
             transform.LookAt(new Vector3(player.position.x, transform.position.y, player.position.z));
 
             attackTimer -= Time.deltaTime;
-            if (attackTimer <= 0f && isGrounded) // Атака только на земле
+            if (attackTimer <= 0f)
             {
                 animator.SetTrigger("Attack");
                 attackTimer = attackCooldown;
             }
 
             animator.SetFloat("MoveSpeed", 0f);
-        }
-    }
-
-    private void OnCollisionEnter(Collision collision)
-    {
-        // Уменьшаем физическое отталкивание
-        if (collision.gameObject.layer == obstacleLayer)
-        {
-            rb.linearVelocity = new Vector3(rb.linearVelocity.x * 0.5f, rb.linearVelocity.y, rb.linearVelocity.z * 0.5f);
-        }
-    }
-
-    private void OnDrawGizmosSelected()
-    {
-        if (groundCheck != null)
-        {
-            Gizmos.color = isGrounded ? Color.green : Color.red;
-            Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
         }
     }
 }

@@ -37,9 +37,6 @@ namespace Supercyan.FreeSample
 
         private bool m_wasGrounded;
         private Vector3 m_currentDirection = Vector3.zero;
-
-        private float m_jumpTimeStamp = 0;
-        private float m_minJumpInterval = 0.25f;
         private bool m_jumpInput = false;
 
         private bool m_isGrounded;
@@ -79,7 +76,8 @@ namespace Supercyan.FreeSample
             float targetWeight = isAttacking ? 1f : 0f;
             upperBodyWeight = Mathf.MoveTowards(upperBodyWeight, targetWeight, Time.deltaTime * 10f);
             m_animator.SetLayerWeight(1, upperBodyWeight);
-            if (!m_jumpInput && Input.GetKey(KeyCode.Space))
+
+            if (Input.GetKeyDown(KeyCode.Space))
             {
                 m_jumpInput = true;
             }
@@ -209,11 +207,8 @@ namespace Supercyan.FreeSample
 
         private void JumpingAndLanding()
         {
-            bool jumpCooldownOver = (Time.time - m_jumpTimeStamp) >= m_minJumpInterval;
-
-            if (jumpCooldownOver && m_isGrounded && m_jumpInput)
+            if (m_isGrounded && m_jumpInput)
             {
-                m_jumpTimeStamp = Time.time;
                 m_rigidBody.AddForce(Vector3.up * m_jumpForce, ForceMode.Impulse);
             }
         }

@@ -155,7 +155,7 @@ AnimatorController:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: FreeAnimationsEnemy
+  m_Name: Player
   serializedVersion: 5
   m_AnimatorParameters:
   - m_Name: MoveSpeed
@@ -679,10 +679,10 @@ AnimatorStateMachine:
     m_Position: {x: 20, y: -310, z: 0}
   - serializedVersion: 1
     m_State: {fileID: 110277918}
-    m_Position: {x: 10, y: -120, z: 0}
+    m_Position: {x: 20, y: -120, z: 0}
   - serializedVersion: 1
     m_State: {fileID: -6348630068654480936}
-    m_Position: {x: 240, y: -120, z: 0}
+    m_Position: {x: 230, y: -120, z: 0}
   m_ChildStateMachines: []
   m_AnyStateTransitions:
   - {fileID: 110105256}
